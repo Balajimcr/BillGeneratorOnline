@@ -1,0 +1,13 @@
+{
+  "_note": "Edit this file to pre-fill the form with your recurring details. Empty strings are ignored at load time.",
+  "empName": "",
+  "address": "",
+  "landlordName": "",
+  "panNo": "",
+  "rentAmount": "",
+  "paymentMethod": "Cash",
+  "currency": "₹",
+  "billBy": "Monthly",
+  "template": 3,
+  "fileName": "Rent Receipt"
+}

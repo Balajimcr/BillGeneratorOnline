@@ -1,0 +1,420 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="Free Indian receipt and invoice generator with PDF export, templates, and PWA support." />
+  <title>Bill Generator – Choose a Template</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet" />
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/all.min.css" />
+  <style>
+    :root {
+      --primary: #0d9488;
+      --primary-dark: #0f766e;
+      --orange: #f97316;
+      --border: #e5e7eb;
+      --bg: #f9fafb;
+      --muted: #6b7280;
+    }
+
+    body {
+      background: var(--bg);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      color: #111827;
+    }
+
+    /* ── Navbar ── */
+    .navbar {
+      background: #fff;
+      border-bottom: 1px solid var(--border);
+      padding: 0.75rem 1.5rem;
+    }
+    .navbar-brand {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      text-decoration: none;
+    }
+    .brand-icon {
+      width: 36px;
+      height: 36px;
+      background: linear-gradient(135deg, #f97316 40%, #0d9488 100%);
+      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #fff;
+      font-weight: 800;
+      font-size: 0.85rem;
+      letter-spacing: -0.5px;
+      flex-shrink: 0;
+    }
+    .brand-text {
+      font-size: 1.1rem;
+      font-weight: 700;
+      color: #111827;
+      line-height: 1;
+    }
+    .brand-text span:first-child { color: #f97316; }
+    .brand-text span:last-child  { color: #0d9488; }
+
+    .nav-link {
+      color: #374151 !important;
+      font-size: 0.9rem;
+      font-weight: 500;
+      padding: 0.4rem 0.75rem !important;
+    }
+    .nav-link.active-nav {
+      color: #111827 !important;
+      font-weight: 600;
+      border-bottom: 2px solid #111827;
+    }
+    .btn-credits {
+      background: var(--primary);
+      color: #fff;
+      border: none;
+      border-radius: 999px;
+      padding: 0.35rem 1rem;
+      font-size: 0.85rem;
+      font-weight: 600;
+      display: inline-flex;
+      align-items: center;
+      gap: 0.4rem;
+    }
+
+    /* ── Page header ── */
+    .page-top {
+      max-width: 1280px;
+      margin: 2rem auto 1.25rem;
+      padding: 0 1.5rem;
+      display: flex;
+      align-items: flex-end;
+      justify-content: space-between;
+      gap: 1rem;
+      flex-wrap: wrap;
+    }
+    .page-top h1 {
+      font-size: 1.75rem;
+      font-weight: 700;
+      margin: 0 0 0.2rem;
+    }
+    .page-top .subtitle {
+      color: var(--muted);
+      font-size: 0.9rem;
+      margin: 0;
+    }
+    .search-wrap {
+      position: relative;
+      min-width: 240px;
+    }
+    .search-wrap i {
+      position: absolute;
+      left: 0.75rem;
+      top: 50%;
+      transform: translateY(-50%);
+      color: #9ca3af;
+      font-size: 0.85rem;
+    }
+    .search-wrap input {
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 0.5rem 0.75rem 0.5rem 2.25rem;
+      font-size: 0.875rem;
+      width: 100%;
+      outline: none;
+      background: #fff;
+    }
+    .search-wrap input:focus {
+      border-color: var(--primary);
+      box-shadow: 0 0 0 3px rgba(13,148,136,0.1);
+    }
+
+    /* ── Category tabs ── */
+    .category-bar {
+      max-width: 1280px;
+      margin: 0 auto 1.75rem;
+      padding: 0 1.5rem;
+      display: flex;
+      gap: 0.5rem;
+      overflow-x: auto;
+      scrollbar-width: none;
+    }
+    .category-bar::-webkit-scrollbar { display: none; }
+    .cat-btn {
+      white-space: nowrap;
+      border: 1px solid var(--border);
+      background: #fff;
+      color: #374151;
+      border-radius: 999px;
+      padding: 0.35rem 1rem;
+      font-size: 0.85rem;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.15s;
+      flex-shrink: 0;
+    }
+    .cat-btn:hover { border-color: #9ca3af; }
+    .cat-btn.active {
+      background: var(--primary);
+      border-color: var(--primary);
+      color: #fff;
+    }
+
+    /* ── Card grid ── */
+    .card-grid {
+      max-width: 1280px;
+      margin: 0 auto;
+      padding: 0 1.5rem 3rem;
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 1.25rem;
+    }
+    @media (max-width: 1100px) { .card-grid { grid-template-columns: repeat(3, 1fr); } }
+    @media (max-width: 768px)  { .card-grid { grid-template-columns: repeat(2, 1fr); } }
+    @media (max-width: 480px)  { .card-grid { grid-template-columns: 1fr; } }
+
+    .tpl-card {
+      background: #fff;
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 1.25rem;
+      display: flex;
+      flex-direction: column;
+      transition: box-shadow 0.2s, transform 0.2s;
+      cursor: pointer;
+    }
+    .tpl-card:hover {
+      box-shadow: 0 4px 20px rgba(0,0,0,0.08);
+      transform: translateY(-2px);
+    }
+    .card-top {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      margin-bottom: 0.75rem;
+    }
+    .card-icon {
+      width: 56px;
+      height: 56px;
+      border-radius: 12px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1.75rem;
+      flex-shrink: 0;
+    }
+    .cat-badge {
+      background: var(--orange);
+      color: #fff;
+      font-size: 0.68rem;
+      font-weight: 700;
+      padding: 0.2rem 0.55rem;
+      border-radius: 999px;
+      white-space: nowrap;
+    }
+    .card-title {
+      font-weight: 700;
+      font-size: 1rem;
+      color: #111827;
+      margin: 0 0 0.4rem;
+      display: flex;
+      align-items: center;
+      gap: 0.4rem;
+      flex-wrap: wrap;
+    }
+    .new-badge {
+      background: #10b981;
+      color: #fff;
+      font-size: 0.62rem;
+      font-weight: 700;
+      padding: 0.15rem 0.5rem;
+      border-radius: 999px;
+      text-transform: uppercase;
+      letter-spacing: 0.03em;
+    }
+    .card-desc {
+      color: var(--muted);
+      font-size: 0.83rem;
+      line-height: 1.5;
+      flex: 1;
+      margin: 0 0 0.9rem;
+    }
+    .card-cta {
+      color: var(--primary);
+      font-size: 0.875rem;
+      font-weight: 600;
+      text-decoration: none;
+      display: inline-flex;
+      align-items: center;
+      gap: 0.3rem;
+    }
+    .card-cta:hover { color: var(--primary-dark); }
+
+    .no-results {
+      grid-column: 1 / -1;
+      text-align: center;
+      padding: 3rem 0;
+      color: var(--muted);
+    }
+    .no-results i { font-size: 2rem; margin-bottom: 0.75rem; display: block; opacity: 0.4; }
+  </style>
+</head>
+<body>
+
+<!-- ── Navbar ── -->
+<nav class="navbar d-flex align-items-center justify-content-between">
+  <a class="navbar-brand" href="index.html">
+    <div class="brand-icon">bg</div>
+    <div class="brand-text">
+      <span>bill</span><span>generator</span>
+    </div>
+  </a>
+
+  <div class="d-flex align-items-center gap-3">
+    <a href="index.html" class="nav-link active-nav">Home</a>
+    <a href="#" class="nav-link">Blog</a>
+  </div>
+
+  <div class="d-flex align-items-center gap-3">
+    <button class="btn-credits">
+      <i class="fas fa-coins"></i> Free &amp; Offline
+    </button>
+  </div>
+</nav>
+
+<!-- ── Page heading + search ── -->
+<div class="page-top">
+  <div>
+    <h1>Choose a Template</h1>
+    <p class="subtitle" id="templateCount">28 templates &middot; fill in details &middot; download PDF</p>
+  </div>
+  <div class="search-wrap">
+    <i class="fas fa-search"></i>
+    <input type="text" id="searchInput" placeholder="Search templates..." oninput="renderCards()" />
+  </div>
+</div>
+
+<!-- ── Category tabs ── -->
+<div class="category-bar" id="categoryBar"></div>
+
+<!-- ── Card grid ── -->
+<div class="card-grid" id="cardGrid"></div>
+
+<script>
+const TEMPLATES = [
+  /* Transportation */
+  { name: 'Fuel Bill',         category: 'Transportation', desc: 'Generate professional fuel receipts for petrol, diesel, or CNG',            icon: '⛽', bg: '#fee2e2', isNew: true,  link: '#' },
+  { name: 'Cab Bill',          category: 'Transportation', desc: 'Create ride receipts with fare breakdown and trip details',                  icon: '🚕', bg: '#dbeafe', isNew: true,  link: '#' },
+  { name: 'Petrol Bill',       category: 'Transportation', desc: 'Itemized petrol pump receipts with vehicle and fuel details',               icon: '🛢️', bg: '#fef9c3', isNew: false, link: '#' },
+  { name: 'Parking Receipt',   category: 'Transportation', desc: 'Parking fee receipts with vehicle number, slot, and duration',              icon: '🅿️', bg: '#e0f2fe', isNew: false, link: '#' },
+
+  /* Housing */
+  { name: 'Rent Receipt',      category: 'Housing',        desc: 'Create rental payment receipts for landlords and tenants',                  icon: '🏠', bg: '#fef3c7', isNew: true,  link: 'rent_receipt_generator.html' },
+  { name: 'Maintenance Bill',  category: 'Housing',        desc: 'Society maintenance receipts with breakdown and due dates',                 icon: '🏢', bg: '#f0fdf4', isNew: false, link: '#' },
+
+  /* Salary */
+  { name: 'Driver Salary',     category: 'Salary',         desc: 'Generate salary slips for drivers with allowances and deductions',         icon: '🚗', bg: '#f5f3ff', isNew: true,  link: '#' },
+  { name: 'Daily Helper',      category: 'Salary',         desc: 'Salary receipts for maids, cooks, cleaners, and watchmen',                 icon: '🧹', bg: '#fdf2f8', isNew: true,  link: '#' },
+  { name: 'Salary Slip',       category: 'Salary',         desc: 'Formal salary slips with HRA, DA, PF, and net pay breakdown',              icon: '💼', bg: '#eff6ff', isNew: false, link: '#' },
+
+  /* Food & Dining */
+  { name: 'Restaurant Bill',   category: 'Food & Dining',  desc: 'Create itemized restaurant bills with GST calculations',                   icon: '🍽️', bg: '#fff7ed', isNew: true,  link: '#' },
+  { name: 'Meal Bill',         category: 'Food & Dining',  desc: 'Food delivery tax invoices with HSN, CGST/SGST lines, and platform details', icon: '🛵', bg: '#fefce8', isNew: true,  link: '#' },
+  { name: 'Bakery Receipt',    category: 'Food & Dining',  desc: 'Bakery and café receipts with item list and GST',                          icon: '🥐', bg: '#fef3c7', isNew: false, link: '#' },
+
+  /* Healthcare */
+  { name: 'Medical Bill',      category: 'Healthcare',     desc: 'Generate medical and pharmacy bills for healthcare expenses',              icon: '🏥', bg: '#f0fdf4', isNew: true,  link: '#' },
+  { name: 'Pharmacy Bill',     category: 'Healthcare',     desc: 'Retail pharmacy invoices with MRP, GST, batch details, and branch branding', icon: '💊', bg: '#ecfdf5', isNew: true,  link: '#' },
+  { name: 'Lab Test Receipt',  category: 'Healthcare',     desc: 'Diagnostic lab receipts with test names, referral, and payment details',   icon: '🧪', bg: '#f0f9ff', isNew: false, link: '#' },
+
+  /* Shopping */
+  { name: 'Grocery Bill',      category: 'Shopping',       desc: 'Generate itemized grocery and mart bills',                                  icon: '🛒', bg: '#fdf4ff', isNew: false, link: '#' },
+  { name: 'D Mart Bill',       category: 'Shopping',       desc: 'Retail mart invoices with per-line GST slabs, CGST/SGST breakup, and order details', icon: '🏪', bg: '#fff1f2', isNew: true,  link: '#' },
+  { name: 'Book Receipt',      category: 'Shopping',       desc: 'Create receipts for book purchases from bookstores',                       icon: '📚', bg: '#f0fdf4', isNew: false, link: '#' },
+  { name: 'Electronics Bill',  category: 'Shopping',       desc: 'Electronics purchase bills with model, serial number, and warranty info',  icon: '📱', bg: '#eff6ff', isNew: false, link: '#' },
+
+  /* Utilities */
+  { name: 'Electricity Bill',  category: 'Utilities',      desc: 'Itemized electricity bills with units, tariff slabs, and dues',            icon: '⚡', bg: '#fefce8', isNew: false, link: '#' },
+  { name: 'Water Bill',        category: 'Utilities',      desc: 'Water supply receipts with meter readings and connection details',          icon: '💧', bg: '#e0f2fe', isNew: false, link: '#' },
+  { name: 'Internet Bill',     category: 'Utilities',      desc: 'Broadband/fiber billing with plan, period, and GST details',               icon: '📶', bg: '#f5f3ff', isNew: false, link: '#' },
+
+  /* Travel */
+  { name: 'Hotel Bill',        category: 'Travel',         desc: 'Hotel stay invoices with room, GST, and check-in/out details',             icon: '🏨', bg: '#fef3c7', isNew: false, link: '#' },
+  { name: 'Flight Receipt',    category: 'Travel',         desc: 'Air travel expense receipts with PNR, sector, and fare breakdown',         icon: '✈️', bg: '#e0f2fe', isNew: false, link: '#' },
+
+  /* Health & Fitness */
+  { name: 'Gym Bill',          category: 'Health & Fitness', desc: 'Gym membership and personal training fee receipts',                      icon: '💪', bg: '#fee2e2', isNew: false, link: '#' },
+
+  /* Services */
+  { name: 'Plumber Bill',      category: 'Services',       desc: 'Plumbing service receipts with work done, materials, and labour charges',  icon: '🔧', bg: '#f0fdf4', isNew: false, link: '#' },
+  { name: 'Electrician Bill',  category: 'Services',       desc: 'Electrical service receipts with job description and material cost',       icon: '🔌', bg: '#fefce8', isNew: false, link: '#' },
+
+  /* Education */
+  { name: 'School Fee',        category: 'Education',      desc: 'School and college fee receipts with term, student ID, and breakdown',     icon: '🏫', bg: '#fff7ed', isNew: false, link: '#' },
+  { name: 'Tuition Fee',       category: 'Education',      desc: 'Private tuition and coaching fee receipts with subject details',           icon: '📖', bg: '#f5f3ff', isNew: false, link: '#' },
+];
+
+const CATEGORIES = ['All', ...new Set(TEMPLATES.map(t => t.category))];
+
+let activeCategory = 'All';
+
+function buildCategoryBar() {
+  const bar = document.getElementById('categoryBar');
+  bar.innerHTML = CATEGORIES.map(cat =>
+    `<button class="cat-btn${cat === activeCategory ? ' active' : ''}" onclick="setCategory('${cat}')">${cat}</button>`
+  ).join('');
+}
+
+function setCategory(cat) {
+  activeCategory = cat;
+  buildCategoryBar();
+  renderCards();
+}
+
+function renderCards() {
+  const query = document.getElementById('searchInput').value.trim().toLowerCase();
+  const grid = document.getElementById('cardGrid');
+
+  const filtered = TEMPLATES.filter(t => {
+    const matchCat = activeCategory === 'All' || t.category === activeCategory;
+    const matchSearch = !query ||
+      t.name.toLowerCase().includes(query) ||
+      t.desc.toLowerCase().includes(query) ||
+      t.category.toLowerCase().includes(query);
+    return matchCat && matchSearch;
+  });
+
+  document.getElementById('templateCount').textContent =
+    `${filtered.length} template${filtered.length !== 1 ? 's' : ''} · fill in details · download PDF`;
+
+  if (filtered.length === 0) {
+    grid.innerHTML = `<div class="no-results"><i class="fas fa-search"></i>No templates found for "<strong>${query}</strong>"</div>`;
+    return;
+  }
+
+  grid.innerHTML = filtered.map(t => {
+    const isExternal = t.link !== '#';
+    return `
+      <div class="tpl-card" onclick="window.location='${t.link}'">
+        <div class="card-top">
+          <div class="card-icon" style="background:${t.bg}">${t.icon}</div>
+          <span class="cat-badge">${t.category}</span>
+        </div>
+        <div class="card-title">
+          ${t.name}
+          ${t.isNew ? '<span class="new-badge">NEW</span>' : ''}
+        </div>
+        <p class="card-desc">${t.desc}</p>
+        <a href="${t.link}" class="card-cta" onclick="event.stopPropagation()">
+          ${isExternal ? 'Generate Now' : 'Coming Soon'} <i class="fas fa-arrow-right" style="font-size:0.75rem"></i>
+        </a>
+      </div>
+    `;
+  }).join('');
+}
+
+buildCategoryBar();
+renderCards();
+</script>
+</body>
+</html>
