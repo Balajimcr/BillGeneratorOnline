@@ -429,12 +429,6 @@
                         <input type="date" class="form-control" id="toDate" onchange="updatePreview()">
                     </div>
                 </div>
-                <div class="form-check mt-3">
-                    <input class="form-check-input" type="checkbox" id="zipDownload">
-                    <label class="form-check-label" for="zipDownload" style="font-size: 0.875rem;">
-                        Download each receipt as a separate PDF (packaged in a ZIP file)
-                    </label>
-                </div>
             </div>
 
             <!-- Signature -->
@@ -460,6 +454,14 @@
                 <div class="mt-2">
                     <button type="button" class="btn btn-sm btn-outline-secondary" onclick="clearSignature()">Clear</button>
                 </div>
+            </div>
+
+            <!-- Bulk Export Option -->
+            <div class="form-check mb-3">
+                <input class="form-check-input" type="checkbox" id="bulkExport">
+                <label class="form-check-label" for="bulkExport" style="font-size: 0.875rem;">
+                    Bulk Export — generate all receipts for the selected date range
+                </label>
             </div>
 
             <!-- Download Settings -->
@@ -678,14 +680,16 @@ function formatDate(dateStr) {
     if (!dateStr) return '';
     const d = new Date(dateStr + 'T00:00:00');
     const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-    return d.getDate() + ' ' + months[d.getMonth()] + ' ' + d.getFullYear();
+    const day = String(d.getDate()).padStart(2, '0');
+    return day + ' ' + months[d.getMonth()] + ' ' + d.getFullYear();
 }
 
 function formatShortDate(dateStr) {
     if (!dateStr) return '';
     const d = new Date(dateStr + 'T00:00:00');
     const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-    return d.getDate() + ' ' + months[d.getMonth()] + ' ' + d.getFullYear();
+    const day = String(d.getDate()).padStart(2, '0');
+    return day + ' ' + months[d.getMonth()] + ' ' + d.getFullYear();
 }
 
 // ========== PREVIEW UPDATE ==========
@@ -701,7 +705,7 @@ function updatePreview() {
     const method = document.getElementById('paymentMethod').value;
     const fromDate = document.getElementById('fromDate').value;
     const toDate = document.getElementById('toDate').value;
-    const todayStr = new Date().toISOString().split('T')[0];
+    const todayStr = toISODateLocal(new Date());
 
     const displayDate = formatDate(todayStr);
     const shortFrom = formatShortDate(fromDate);
@@ -802,6 +806,13 @@ function updatePreview() {
 }
 
 // ========== MONTH PERIODS FOR BULK ==========
+function toISODateLocal(d) {
+    const year = d.getFullYear();
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return year + '-' + month + '-' + day;
+}
+
 function getMonthPeriods(startStr, endStr) {
     const start = new Date(startStr + 'T00:00:00');
     const end = new Date(endStr + 'T00:00:00');
@@ -815,8 +826,8 @@ function getMonthPeriods(startStr, endStr) {
         const monthEnd = new Date(year, month + 1, 0);
 
         periods.push({
-            from: monthStart.toISOString().split('T')[0],
-            to: monthEnd.toISOString().split('T')[0],
+            from: toISODateLocal(monthStart),
+            to: toISODateLocal(monthEnd),
             label: monthStart.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })
         });
 
@@ -826,48 +837,357 @@ function getMonthPeriods(startStr, endStr) {
 }
 
 // ========== EXPORT CAPTURE ==========
+async function sanitizeImagesForCapture(container) {
+    const images = container.querySelectorAll('img');
+    const originals = [];
+    for (let i = 0; i < images.length; i++) {
+        const img = images[i];
+        originals.push({ img: img, src: img.src, display: img.style.display });
+        try {
+            const dataUrl = await loadImageAsDataURL(img.src);
+            if (dataUrl) {
+                img.src = dataUrl;
+            } else {
+                img.style.display = 'none';
+            }
+        } catch (e) {
+            img.style.display = 'none';
+        }
+    }
+    return originals;
+}
+
+function restoreImagesForCapture(originals) {
+    for (let i = 0; i < originals.length; i++) {
+        const item = originals[i];
+        item.img.src = item.src;
+        item.img.style.display = item.display;
+    }
+}
+
 async function captureExportElement() {
     const element = document.getElementById('receiptPreview');
     element.classList.add('exporting');
     element.scrollIntoView({ block: 'nearest', behavior: 'auto' });
     await new Promise(function(r) { setTimeout(r, 400); });
 
+    // Convert images (stamp, signature) to data URLs or hide them so the
+    // canvas does not get tainted and can be exported to PNG/PDF.
+    const imageBackups = await sanitizeImagesForCapture(element);
+
     const canvas = await html2canvas(element, {
         scale: 3,
         useCORS: true,
-        allowTaint: true,
+        allowTaint: false,
         backgroundColor: '#ffffff',
         logging: false,
         removeContainer: false
     });
 
+    restoreImagesForCapture(imageBackups);
     element.classList.remove('exporting');
     return canvas;
 }
 
-// ========== PDF HELPERS ==========
-function addImageToA4(pdf, imgData, canvasWidth, canvasHeight, landscape) {
-    const pageW = landscape ? 297 : 210;
-    const pageH = landscape ? 210 : 297;
-    const imgRatio = canvasWidth / canvasHeight;
-    const pageRatio = pageW / pageH;
+// ========== TEXT-BASED PDF HELPERS ==========
+// The standard 14 PDF fonts do not include the Indian Rupee sign (U+20B9),
+// so fall back to "Rs." for copyable text. $, € and £ are supported.
+function pdfCurrencySymbol(currency) {
+    if (!currency) return '';
+    const c = currency.trim();
+    if (c === '\u20B9' || c === '&#8377;' || c === 'Rs.') return 'Rs.';
+    return c;
+}
 
-    let drawW, drawH, drawX, drawY;
-    if (imgRatio > pageRatio) {
-        // Image is wider relative to height: fit to page width
-        drawW = pageW;
-        drawH = drawW / imgRatio;
-        drawX = 0;
-        drawY = (pageH - drawH) / 2;
-    } else {
-        // Image is taller relative to width: fit to page height
-        drawH = pageH;
-        drawW = drawH * imgRatio;
-        drawX = (pageW - drawW) / 2;
-        drawY = 0;
+function loadImageAsDataURL(src) {
+    return new Promise(function(resolve) {
+        const img = new Image();
+        // file:// origins cannot satisfy CORS; load normally and accept
+        // that the canvas may be tainted. For http/https we request CORS
+        // so the image can be read back as a data URL.
+        if (window.location.protocol !== 'file:') {
+            img.crossOrigin = 'anonymous';
+        }
+        img.onload = function() {
+            const canvas = document.createElement('canvas');
+            canvas.width = img.naturalWidth || img.width || 1;
+            canvas.height = img.naturalHeight || img.height || 1;
+            const ctx = canvas.getContext('2d');
+            try {
+                ctx.drawImage(img, 0, 0);
+                resolve(canvas.toDataURL('image/png'));
+            } catch (e) {
+                // Tainted canvas (common with file://); export without stamp
+                resolve('');
+            }
+        };
+        img.onerror = function() {
+            resolve('');
+        };
+        img.src = src;
+    });
+}
+
+let cachedStampDataURL = '';
+async function getStampDataURL() {
+    if (cachedStampDataURL) return cachedStampDataURL;
+    cachedStampDataURL = await loadImageAsDataURL(stampUri);
+    return cachedStampDataURL;
+}
+
+function addWrappedText(pdf, text, x, y, maxWidth, lineHeight) {
+    const lines = pdf.splitTextToSize(String(text || ''), maxWidth);
+    pdf.text(lines, x, y);
+    return lines.length * lineHeight;
+}
+
+// Split mixed bold/normal text into wrapped lines. Each segment has {text, bold}.
+function wrapMixedText(pdf, segments, maxWidth, fontFamily) {
+    fontFamily = fontFamily || 'helvetica';
+    const lines = [];
+    let currentLine = [];
+    let currentWidth = 0;
+
+    for (let s = 0; s < segments.length; s++) {
+        const seg = segments[s];
+        const words = String(seg.text).split(/\s+/);
+        for (let i = 0; i < words.length; i++) {
+            const word = words[i];
+            if (!word) continue;
+            pdf.setFont(fontFamily, seg.bold ? 'bold' : 'normal');
+            const spaceWidth = currentLine.length === 0 ? 0 : pdf.getTextWidth(' ');
+            const wordWidth = pdf.getTextWidth(word);
+
+            if (currentWidth + spaceWidth + wordWidth > maxWidth && currentLine.length > 0) {
+                lines.push(currentLine);
+                currentLine = [];
+                currentWidth = 0;
+            }
+
+            if (currentLine.length > 0) {
+                currentLine.push({ text: ' ', bold: seg.bold, fontFamily: fontFamily });
+                currentWidth += spaceWidth;
+            }
+            currentLine.push({ text: word, bold: seg.bold, fontFamily: fontFamily });
+            currentWidth += wordWidth;
+        }
     }
 
-    pdf.addImage(imgData, 'PNG', drawX, drawY, drawW, drawH);
+    if (currentLine.length > 0) {
+        lines.push(currentLine);
+    }
+    return lines;
+}
+
+function drawMixedText(pdf, lines, x, y, lineHeight) {
+    for (let i = 0; i < lines.length; i++) {
+        let cx = x;
+        const line = lines[i];
+        for (let j = 0; j < line.length; j++) {
+            const seg = line[j];
+            pdf.setFont(seg.fontFamily || 'helvetica', seg.bold ? 'bold' : 'normal');
+            pdf.text(seg.text, cx, y + i * lineHeight);
+            cx += pdf.getTextWidth(seg.text);
+        }
+    }
+    return lines.length * lineHeight;
+}
+
+function drawLabelValue(pdf, label, value, x, y, labelWidth, fontFamily) {
+    fontFamily = fontFamily || 'helvetica';
+    pdf.setFont(fontFamily, 'bold');
+    pdf.text(label, x, y);
+    pdf.setFont(fontFamily, 'normal');
+    pdf.text(String(value || ''), x + labelWidth, y);
+}
+
+function drawStampAndSignature(pdf, data, leftX, y, rightX, fontFamily) {
+    const pageH = pdf.internal.pageSize.getHeight();
+    const startY = Math.min(y, pageH - 42);
+
+    pdf.setFontSize(10);
+    pdf.setFont(fontFamily || 'helvetica', 'bold');
+    pdf.text('Revenue Stamp', leftX, startY);
+
+    if (data.stampDataURL) {
+        try {
+            pdf.addImage(data.stampDataURL, 'PNG', leftX, startY + 2, 18, 22);
+        } catch (e) {
+            // Continue without stamp image
+        }
+    }
+
+    const sigWidth = 40;
+    const sigX = Math.max(leftX + 20, rightX - sigWidth);
+    pdf.text('Signature', sigX, startY);
+
+    if (data.signatureData) {
+        try {
+            pdf.addImage(data.signatureData, 'PNG', sigX, startY + 2, sigWidth, 18);
+        } catch (e) {
+            // Continue without signature image
+        }
+    }
+}
+
+function buildTextReceiptPdf(pdf, data) {
+    const isLandscape = data.isLandscape;
+    const pageW = isLandscape ? 297 : 210;
+    const pageH = isLandscape ? 210 : 297;
+    const margin = isLandscape ? 20 : 18;
+    const contentW = pageW - margin * 2;
+    const halfX = pageW / 2 + (isLandscape ? 8 : 4);
+    const rowGap = isLandscape ? 7 : 6;
+    const bodyLineHeight = isLandscape ? 5.8 : 5;
+
+    let y = margin;
+
+    // Date
+    pdf.setFont('times', 'normal');
+    pdf.setFontSize(11);
+    pdf.text('Date: ' + data.displayDate, pageW - margin, y, { align: 'right' });
+    y += 8;
+
+    // Title
+    pdf.setFontSize(17);
+    pdf.setFont('times', 'bold');
+    pdf.text('Rent Receipt', pageW / 2, y, { align: 'center' });
+    y += 10;
+
+    pdf.setFontSize(11);
+
+    if (isLandscape) {
+        // Corporate / Template-1 style - matches the preview image (Arial-like)
+        const font = 'helvetica';
+        const bodySegments = [
+            { text: 'This is to certify that Mr./Ms. ', bold: false },
+            { text: data.empName, bold: true },
+            { text: ' have paid ', bold: false },
+            { text: data.currency + ' ' + data.amount, bold: true },
+            { text: ' to landlord, Mr/Ms ', bold: false },
+            { text: data.landlord, bold: true },
+            { text: ' towards Rent of the period ', bold: false },
+            { text: data.shortFrom, bold: true },
+            { text: ' to ', bold: false },
+            { text: data.shortTo, bold: true },
+            { text: ' (Acknowledged receipt enclosed).', bold: false }
+        ];
+        const bodyLines = wrapMixedText(pdf, bodySegments, contentW, font);
+        y += drawMixedText(pdf, bodyLines, margin, y, bodyLineHeight);
+        y += 5;
+
+        const declarationSegments = [
+            { text: 'Please reimburse the above amount. I further declare that what is stated above is correct and true.', bold: false }
+        ];
+        const declLines = wrapMixedText(pdf, declarationSegments, contentW, font);
+        y += drawMixedText(pdf, declLines, margin, y, bodyLineHeight);
+        y += 8;
+
+        // Address (left) / Payment Method (right). Address gets all space
+        // between its label and the payment-method block so long addresses fit.
+        const addressLabelWidth = 20;
+        const pmLabel = 'Payment Method:';
+        pdf.setFont(font, 'bold');
+        const pmLabelW = pdf.getTextWidth(pmLabel);
+        pdf.setFont(font, 'normal');
+        const pmValueW = pdf.getTextWidth(data.method);
+        const pmTotalW = pmLabelW + pmValueW + 2;
+        const pmX = pageW - margin - pmTotalW;
+
+        const addressMaxWidth = pmX - margin - addressLabelWidth - 6;
+        pdf.setFont(font, 'bold');
+        pdf.text('Address:', margin, y);
+        pdf.setFont(font, 'normal');
+        const addressLines = pdf.splitTextToSize(data.address, addressMaxWidth);
+        pdf.text(addressLines, margin + addressLabelWidth, y);
+        const addressRowH = addressLines.length * 5.2;
+
+        pdf.setFont(font, 'bold');
+        pdf.text(pmLabel, pmX, y);
+        pdf.setFont(font, 'normal');
+        pdf.text(data.method, pmX + pmLabelW + 1, y);
+
+        y += Math.max(addressRowH, rowGap);
+
+        // Divider
+        pdf.setLineWidth(0.2);
+        pdf.line(margin, y, pageW - margin, y);
+        y += 6;
+
+        // Landlord / Employee
+        drawLabelValue(pdf, 'Landlord Name:', data.landlord, margin, y, 34, font);
+        drawLabelValue(pdf, 'Employee Name:', data.empName, halfX, y, 34, font);
+        y += rowGap;
+
+        // PAN
+        drawLabelValue(pdf, 'Pan No.:', data.pan, margin, y, 22, font);
+        y += rowGap;
+
+        // Period
+        drawLabelValue(pdf, 'Period:', data.shortFrom + ' - ' + data.shortTo, margin, y, 19, font);
+        y += 12;
+
+        drawStampAndSignature(pdf, data, margin, y, pageW - margin, font);
+    } else {
+        // Classic / portrait style
+        const body = 'Received from Mr./Ms. ' + data.empName + ' the sum of ' + data.currency + ' ' + data.amount + ' towards rent for the property located at ' + data.address + ' for the period ' + data.shortFrom + ' to ' + data.shortTo + '.';
+        pdf.setFont('helvetica', 'normal');
+        y += addWrappedText(pdf, body, margin, y, contentW, bodyLineHeight);
+        y += 7;
+
+        pdf.setFont('helvetica', 'bold');
+        pdf.text('Landlord:', margin, y);
+        pdf.setFont('helvetica', 'normal');
+        pdf.text(data.landlord, margin + 24, y);
+
+        pdf.setFont('helvetica', 'bold');
+        pdf.text('PAN No:', halfX, y);
+        pdf.setFont('helvetica', 'normal');
+        pdf.text(data.pan, halfX + 22, y);
+        y += rowGap;
+
+        pdf.setFont('helvetica', 'bold');
+        pdf.text('Payment:', margin, y);
+        pdf.setFont('helvetica', 'normal');
+        pdf.text(data.method, margin + 24, y);
+
+        pdf.setFont('helvetica', 'bold');
+        pdf.text('Period:', halfX, y);
+        pdf.setFont('helvetica', 'normal');
+        pdf.text(data.shortFrom + ' - ' + data.shortTo, halfX + 20, y);
+        y += 10;
+
+        drawStampAndSignature(pdf, data, margin, y, pageW - margin, 'helvetica');
+    }
+}
+
+function collectReceiptData() {
+    const empName = document.getElementById('empName').value || '';
+    const address = document.getElementById('address').value || '';
+    const landlord = document.getElementById('landlordName').value || '';
+    const pan = document.getElementById('panNo').value || '';
+    const amount = document.getElementById('rentAmount').value || '';
+    const currency = pdfCurrencySymbol(document.getElementById('currency').value);
+    const method = document.getElementById('paymentMethod').value || '';
+    const fromDate = document.getElementById('fromDate').value;
+    const toDate = document.getElementById('toDate').value;
+    const todayStr = toISODateLocal(new Date());
+
+    return {
+        empName: empName,
+        address: address,
+        landlord: landlord,
+        pan: pan,
+        amount: amount,
+        currency: currency,
+        method: method,
+        shortFrom: formatShortDate(fromDate),
+        shortTo: formatShortDate(toDate),
+        displayDate: formatShortDate(fromDate) || formatDate(todayStr),
+        isLandscape: currentTemplate === 3,
+        signatureData: signatureData || '',
+        stampDataURL: cachedStampDataURL
+    };
 }
 
 // ========== GENERATE PDF ==========
@@ -884,11 +1204,13 @@ async function generatePDF() {
     }
 
     const fileName = document.getElementById('fileName').value || 'Rent Receipt';
-    const zipMode = document.getElementById('zipDownload').checked;
+    const bulkMode = document.getElementById('bulkExport').checked;
     const billBy = document.getElementById('billBy').value;
-    const isLandscape = currentTemplate === 3;
     const originalFrom = fromDate;
     const originalTo = toDate;
+
+    // Pre-load the revenue stamp once; signature is already a data URL.
+    await getStampDataURL();
 
     let periods = [];
     if (billBy === 'Monthly') {
@@ -897,39 +1219,29 @@ async function generatePDF() {
         periods = [{ from: fromDate, to: toDate, label: 'Receipt' }];
     }
 
-    if (zipMode && periods.length > 1) {
-        const zip = new JSZip();
+    if (bulkMode && periods.length > 1) {
+        // Bulk export: one PDF with a page per month.
+        const pdf = new jspdf.jsPDF(currentTemplate === 3 ? 'l' : 'p', 'mm', 'a4');
         for (let i = 0; i < periods.length; i++) {
             const p = periods[i];
             document.getElementById('fromDate').value = p.from;
             document.getElementById('toDate').value = p.to;
             updatePreview();
-            await new Promise(function(r) { setTimeout(r, 600); });
+            await new Promise(function(r) { setTimeout(r, 300); });
 
-            const canvas = await captureExportElement();
-            const imgData = canvas.toDataURL('image/png');
-
-            const pdf = new jspdf.jsPDF(isLandscape ? 'l' : 'p', 'mm', 'a4');
-            addImageToA4(pdf, imgData, canvas.width, canvas.height, isLandscape);
-            const pdfBlob = pdf.output('blob');
-            zip.file(fileName + '_' + (i+1) + '_' + p.label.replace(/\s+/g, '_') + '.pdf', pdfBlob);
+            if (i > 0) {
+                pdf.addPage(currentTemplate === 3 ? 'l' : 'p', 'mm', 'a4');
+            }
+            buildTextReceiptPdf(pdf, collectReceiptData());
         }
-
-        const zipBlob = await zip.generateAsync({ type: 'blob' });
-        const link = document.createElement('a');
-        link.href = URL.createObjectURL(zipBlob);
-        link.download = fileName + '.zip';
-        link.click();
+        pdf.save(fileName + '.pdf');
 
         document.getElementById('fromDate').value = originalFrom;
         document.getElementById('toDate').value = originalTo;
         updatePreview();
     } else {
-        const canvas = await captureExportElement();
-        const imgData = canvas.toDataURL('image/png');
-
-        const pdf = new jspdf.jsPDF(isLandscape ? 'l' : 'p', 'mm', 'a4');
-        addImageToA4(pdf, imgData, canvas.width, canvas.height, isLandscape);
+        const pdf = new jspdf.jsPDF(currentTemplate === 3 ? 'l' : 'p', 'mm', 'a4');
+        buildTextReceiptPdf(pdf, collectReceiptData());
         pdf.save(fileName + '.pdf');
     }
 }
@@ -948,12 +1260,50 @@ async function generateImage() {
     }
 
     const fileName = document.getElementById('fileName').value || 'Rent Receipt';
-    const canvas = await captureExportElement();
+    const bulkMode = document.getElementById('bulkExport').checked;
+    const billBy = document.getElementById('billBy').value;
+    const originalFrom = fromDate;
+    const originalTo = toDate;
 
-    const link = document.createElement('a');
-    link.href = canvas.toDataURL('image/png');
-    link.download = fileName + '.png';
-    link.click();
+    let periods = [];
+    if (billBy === 'Monthly') {
+        periods = getMonthPeriods(fromDate, toDate);
+    } else {
+        periods = [{ from: fromDate, to: toDate, label: 'Receipt' }];
+    }
+
+    if (bulkMode && periods.length > 1) {
+        // Bulk export: ZIP containing one image per month.
+        const zip = new JSZip();
+        for (let i = 0; i < periods.length; i++) {
+            const p = periods[i];
+            document.getElementById('fromDate').value = p.from;
+            document.getElementById('toDate').value = p.to;
+            updatePreview();
+            await new Promise(function(r) { setTimeout(r, 400); });
+
+            const canvas = await captureExportElement();
+            const imgData = canvas.toDataURL('image/png');
+            zip.file(fileName + '_' + (i+1) + '_' + p.label.replace(/\s+/g, '_') + '.png', imgData.split(',')[1], { base64: true });
+        }
+
+        const zipBlob = await zip.generateAsync({ type: 'blob' });
+        const link = document.createElement('a');
+        link.href = URL.createObjectURL(zipBlob);
+        link.download = fileName + '_images.zip';
+        link.click();
+
+        document.getElementById('fromDate').value = originalFrom;
+        document.getElementById('toDate').value = originalTo;
+        updatePreview();
+    } else {
+        const canvas = await captureExportElement();
+
+        const link = document.createElement('a');
+        link.href = canvas.toDataURL('image/png');
+        link.download = fileName + '.png';
+        link.click();
+    }
 }
 
 // ========== CONFIG PERSISTENCE ==========
@@ -961,7 +1311,7 @@ const CONFIG_KEY = 'rent_receipt_config';
 const SAVEABLE_FIELDS = [
     'empName', 'address', 'landlordName', 'panNo', 'rentAmount',
     'paymentMethod', 'currency', 'billBy', 'financialYear',
-    'fromDate', 'toDate', 'month', 'zipDownload', 'fileName'
+    'fromDate', 'toDate', 'month', 'bulkExport', 'fileName'
 ];
 
 function saveConfig() {
